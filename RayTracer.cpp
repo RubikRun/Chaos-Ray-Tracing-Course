@@ -4,12 +4,15 @@
 
 static const int maxColorComponent = 255;
 
-RayTracer::RayTracer(const Image &image)
+RayTracer::RayTracer(const Image &image, const Scene &scene)
 	: image(image)
+	, scene(scene)
 {
 	if (image.resolution.x > 0 && image.resolution.y > 0) {
 		rays = new Ray[image.getPixelCount()];
+		rayResults = new RayResult[image.getPixelCount()];
 		generateRays();
+		traceRays();
 	}
 }
 
@@ -34,7 +37,7 @@ bool RayTracer::writeImage(const char *filepath) const {
 			// Index of the ray in the array that corresponds to this pixel
 			const int rayIdx = pixel.y * image.resolution.x + pixel.x;
 			// Use the ray's color to color the pixel
-			const Color color = rays[rayIdx].color;
+			const Color color = rayResults[rayIdx].color;
 			// Write the color to the output image file for the current pixel
 			ppmFileStream << color.r << " " << color.g << " " << color.b << "\t";
 		}
@@ -90,11 +93,84 @@ Ray RayTracer::generateRay(const Vec2i &pixel) const {
 	ray.orig = { 0.f, 0.f, 0.f };
 	ray.dir = cameraToPixel.getNormal();
 	ray.pixel = pixel;
-	ray.color = {
-		int((ray.dir.x + 1.f) * 0.5f * float(maxColorComponent)),
-		int((ray.dir.y + 1.f) * 0.5f * float(maxColorComponent)),
-		int((ray.dir.z + 1.f) * 0.5f * float(maxColorComponent))
-	};
 
 	return ray;
+}
+
+void RayTracer::traceRays() {
+	// Traverse rays
+	for (int rayIdx = 0; rayIdx < image.getPixelCount(); rayIdx++) {
+		// Trace each ray and save the result
+		rayResults[rayIdx] = traceRay(rays[rayIdx]);
+	}
+}
+
+RayResult RayTracer::traceRay(const Ray &ray) const {
+	// This will be the closest ray result across all triangles
+	RayResult closestRayResult;
+	closestRayResult.tDist = -1.f;
+	// Traverse all triangles in the scene
+	for (int trIdx = 0; trIdx < scene.trianglesCount; trIdx++) {
+		// Trace the ray to the current triangle
+		const RayResult currRayResult = intersectTriangle(scene.triangles[trIdx], ray);
+		if (currRayResult.tDist == -1.f) {
+			continue;
+		}
+		// If the current ray intersection is closer than the closest intersection so far, use the current
+		if (currRayResult.tDist < closestRayResult.tDist || closestRayResult.tDist == -1.f) {
+			closestRayResult = currRayResult;
+		}
+	}
+	
+	return closestRayResult;
+}
+
+RayResult RayTracer::intersectTriangle(const Triangle &triangle, const Ray &ray) const {
+	const Vec3f trNorm = triangle.getNormalVector();
+	const float rayProj = -dotProduct(ray.dir, trNorm);
+	const float distToTrPlane = -dotProduct(triangle.vertices[0], trNorm);
+
+	// If the ray projection on the triangle's normal is approximately zero,
+	// than the ray is almost perpendicular to the triangle's plane,
+	// so we don't bother to intersect it with the triangle
+	if (isApproxZero(rayProj)) {
+		return RayResult();
+	}
+	// If this distance from the origin to the triangle's plane is negative,
+	// this means that the ray is looking at the back side of the triangle,
+	// so we ignore it
+	if (distToTrPlane < 0.f) {
+		return RayResult();
+	}
+
+	const float tDist = distToTrPlane / rayProj;
+	// Point of intersection between the ray and the triangle's plane
+	const Vec3f interPoint = ray.dir * tDist;
+
+	// Check if the point of intersection is inside the triangle
+	const bool insideTriangle = (
+		dotProduct(
+			trNorm,
+			crossProduct(triangle.vertices[1] - triangle.vertices[0], interPoint - triangle.vertices[0])
+		) > 0.f
+		&&
+		dotProduct(
+			trNorm,
+			crossProduct(triangle.vertices[2] - triangle.vertices[1], interPoint - triangle.vertices[1])
+		) > 0.f
+		&&
+		dotProduct(
+			trNorm,
+			crossProduct(triangle.vertices[0] - triangle.vertices[2], interPoint - triangle.vertices[2])
+		) > 0.f
+	);
+
+	if (!insideTriangle) {
+		return RayResult();
+	}
+	
+	return RayResult(
+		triangle.color,
+		tDist
+	);
 }

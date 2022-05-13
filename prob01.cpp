@@ -11,16 +11,16 @@ int main() {
 
 	Triangle triangles[1] = {
 		Triangle(
-			Vec3f(-1.f, -1.f, -3.f),
-			Vec3f(1.f, -1.f, -3.f),
-			Vec3f(-1.f, 1.f, -3.f)
+			Vec3f(-1.75f, -1.75f, -3.f),
+			Vec3f(1.75f, -1.75f, -3.f),
+			Vec3f(0.f, 1.75f, -3.f)
 		)
 	};
 
 	const Scene scene = { triangles, 1 };
 
 	RayTracer rayTracer(image, scene);
-	if (!rayTracer.writeImage("render/output_image_02.ppm")) {
+	if (!rayTracer.writeImage("render/output_image_01.ppm")) {
 		std::cout << "Cannot write output image.\n";
 	}
 
