@@ -1,22 +1,7 @@
 #pragma once
 
+#include "Camera.h"
 #include "utils.hpp"
-
-/// Class holding data about the 2D image in world space.
-struct Image {
-	/// Resolution of the output image, number of pixels horizontally and vertically
-	Vec2i resolution;
-	/// Size of the image in world space.
-	/// The image is considered to be in the XY plane with Z = -distToCamera
-	/// with its center at (0, 0, -distToCamera)
-	Vec2f size;
-	/// Distance from the camera to the image in world space.
-	float distToCamera;
-
-	int getPixelCount() const {
-		return resolution.x * resolution.y;
-	}
-};
 
 /// Class representing a ray traced by the ray tracer.
 struct Ray {
@@ -42,7 +27,7 @@ struct RayResult {
 	float tDist = -1.f;
 };
 
-/// Scene of triangles in world space
+/// Class representing the scene consisting of triangles
 struct Scene {
 	Scene(){}
 
@@ -60,23 +45,26 @@ struct Scene {
 /// capable of generating and tracing rays based on the pixels of some image,
 /// and using them to generate an output image file.
 struct RayTracer {
-	/// Creates a ray tracer for the given image and scene.
-	/// @param[in] imageRect Image whose pixels will be used to generate rays
-	/// @param[in] scene Scene to be rendered
-	RayTracer(const Image &image, const Scene &scene);
+	/// Creates a ray tracer with a given camera and image resolution
+	/// @param[in] camera Camera used to generate rays
+	/// @param[in] imageResolution Resolution of the output image
+	RayTracer(const Camera &camera, const Vec2i &imageResolution);
 
 	/// Frees all memory
 	~RayTracer();
 
-	/// Writes an output image based on the traced rays.
+	/// Sets the scene to be rendered
+	void setScene(const Scene &scene);
+
+	/// Renders an image and writes it to an image file.
 	/// @param[in] filepath Path to the output image
 	/// @return True on success
-	bool writeImage(const char *filepath) const;
+	bool renderImage(const char *filepath) const;
 
 private: /*functions */
 	/// Generates rays for all pixels of the image.
 	/// Saves them to the member array of rays.
-	void generateRays();
+	void generateRays() const;
 	
 	/// Generates a single ray for a single pixel of the image.
 	/// @param[in] pixel Index of a pixel from the image
@@ -85,7 +73,7 @@ private: /*functions */
 
 	/// Traces all generated rays for all pixels of the image.
 	/// Saves the results to the member array of ray results.
-	void traceRays();
+	void traceRays() const;
 
 	/// Traces a single ray for a single pixel of the image.
 	/// Finds where the ray intersects the scene and what color should that ray be.
@@ -100,14 +88,15 @@ private: /*functions */
 	RayResult intersectTriangle(const Triangle &triangle, const Ray &ray) const;
 
 private: /* variables */
-	/// The image used to generate rays
-	Image image;
-
+	/// Camera used to generate rays
+	Camera camera;
 	/// The scene to be rendered
 	Scene scene;
+	/// Resolution of the output image
+	Vec2i imageResolution;
 
 	/// Array of generated rays
-	Ray *rays = nullptr;
+	mutable Ray *rays = nullptr;
 	/// Array of results of traced rays
-	RayResult *rayResults = nullptr;
+	mutable RayResult *rayResults = nullptr;
 };

@@ -154,6 +154,46 @@ struct Vec3f {
 	}
 };
 
+struct Matrix3f {
+	Matrix3f(){}
+
+	Matrix3f(const Vec3f &xCol, const Vec3f &yCol, const Vec3f &zCol)
+		: xCol(xCol), yCol(yCol), zCol(zCol)
+	{}
+
+	Vec3f xCol = { 1.f, 0.f, 0.f };
+	Vec3f yCol = { 0.f, 1.f, 0.f };
+	Vec3f zCol = { 0.f, 0.f, 1.f };
+
+	Vec3f operator*(const Vec3f &vec) const {
+		return {
+			xCol.x * vec.x + yCol.x * vec.y + zCol.x * vec.z,
+			xCol.y * vec.x + yCol.y * vec.y + zCol.y * vec.z,
+			xCol.z * vec.x + yCol.z * vec.y + zCol.z * vec.z,
+		};
+	}
+
+	Matrix3f operator*(const Matrix3f &other) const {
+		return Matrix3f(
+			{
+				xCol.x * other.xCol.x + yCol.x * other.xCol.y + zCol.x * other.xCol.z,
+				xCol.y * other.xCol.x + yCol.y * other.xCol.y + zCol.y * other.xCol.z,
+				xCol.z * other.xCol.x + yCol.z * other.xCol.y + zCol.z * other.xCol.z,
+			},
+			{
+				xCol.x * other.yCol.x + yCol.x * other.yCol.y + zCol.x * other.yCol.z,
+				xCol.y * other.yCol.x + yCol.y * other.yCol.y + zCol.y * other.yCol.z,
+				xCol.z * other.yCol.x + yCol.z * other.yCol.y + zCol.z * other.yCol.z,
+			},
+			{
+				xCol.x * other.zCol.x + yCol.x * other.zCol.y + zCol.x * other.zCol.z,
+				xCol.y * other.zCol.x + yCol.y * other.zCol.y + zCol.y * other.zCol.z,
+				xCol.z * other.zCol.x + yCol.z * other.zCol.y + zCol.z * other.zCol.z,
+			}
+		);
+	}
+};
+
 static Vec3f crossProduct(const Vec3f &lhs, const Vec3f &rhs) {
 	return {
 		lhs.y * rhs.z - lhs.z * rhs.y,
