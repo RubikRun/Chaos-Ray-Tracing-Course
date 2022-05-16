@@ -213,43 +213,28 @@ static float dotProduct(const Vec3f &lhs, const Vec3f &rhs) {
 struct Color {
 	Color(){}
 
-	Color(int r, int g, int b)
+	Color(float r, float g, float b)
 		: r(r), g(g), b(b)
 	{}
 
-	int r = 0;
-	int g = 0;
-	int b = 0;
+	float r = 0.f;
+	float g = 0.f;
+	float b = 0.f;
 };
 
-struct Triangle {
-	Triangle(){}
+static Vec3f getTriangleNormal(Vec3f aVertex, Vec3f bVertex, Vec3f cVertex) {
+	return crossProduct(
+		bVertex - aVertex,
+		cVertex - aVertex
+	).getNormal();
+}
 
-	Triangle(const Vec3f &vert0, const Vec3f &vert1, const Vec3f &vert2, Color color = Color(255, 255, 255))
-		: color(color)
-	{
-		vertices[0] = vert0;
-		vertices[1] = vert1;
-		vertices[2] = vert2;
-	}
-
-	Vec3f getNormalVector() const {
-		return crossProduct(
-			vertices[1] - vertices[0],
-			vertices[2] - vertices[0]
-		).getNormal();
-	}
-
-	float getArea() const {
-		return crossProduct(
-			vertices[1] - vertices[0],
-			vertices[2] - vertices[0]
-		).getLength() / 2.f;
-	}
-
-	Vec3f vertices[3];
-	Color color;
-};
+static float getTriangleArea(Vec3f aVertex, Vec3f bVertex, Vec3f cVertex) {
+	return crossProduct(
+		bVertex - aVertex,
+		cVertex - aVertex
+	).getLength() / 2.f;
+}
 
 static bool isApprox(float lhs, float rhs, float epsilon = 0.0001f) {
 	return fabsf(lhs - rhs) < epsilon;

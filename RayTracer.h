@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Camera.h"
+#include "Scene.h"
 #include "utils.hpp"
 
 /// Class representing a ray traced by the ray tracer.
@@ -27,34 +28,16 @@ struct RayResult {
 	float tDist = -1.f;
 };
 
-/// Class representing the scene consisting of triangles
-struct Scene {
-	Scene(){}
-
-	Scene(Triangle *triangles, int trianglesCount)
-		: triangles(triangles), trianglesCount(trianglesCount)
-	{}
-
-	/// Array of triangles in the scene
-	Triangle *triangles = nullptr;
-	/// Number of triangles
-	int trianglesCount = 0;
-};
-
 /// Class representing the ray tracer,
 /// capable of generating and tracing rays based on the pixels of some image,
 /// and using them to generate an output image file.
 struct RayTracer {
-	/// Creates a ray tracer with a given camera and image resolution
-	/// @param[in] camera Camera used to generate rays
-	/// @param[in] imageResolution Resolution of the output image
-	RayTracer(const Camera &camera, const Vec2i &imageResolution);
+	/// Creates a ray tracer for a given scene
+	/// @param[in] scene Scene to be rendered by the ray tracer
+	RayTracer(const Scene &scene);
 
 	/// Frees all memory
 	~RayTracer();
-
-	/// Sets the scene to be rendered
-	void setScene(const Scene &scene);
 
 	/// Renders an image and writes it to an image file.
 	/// @param[in] filepath Path to the output image
@@ -82,18 +65,19 @@ private: /*functions */
 	RayResult traceRay(const Ray &ray) const;
 
 	/// Intersects a single triangle with a ray
-	/// @param[in] triangle The triangle to be intersected
+	/// @param[in] aVert, bVert, cVert The vertices of the triangle to be intersected
 	/// @param[in] ray The ray to intersect with
 	/// @return The result of the ray intersection
-	RayResult intersectTriangle(const Triangle &triangle, const Ray &ray) const;
+	RayResult intersectTriangle(
+		const Vec3f &aVert,
+		const Vec3f &bVert,
+		const Vec3f &cVert,
+		const Ray &ray
+	) const;
 
 private: /* variables */
-	/// Camera used to generate rays
-	Camera camera;
 	/// The scene to be rendered
 	Scene scene;
-	/// Resolution of the output image
-	Vec2i imageResolution;
 
 	/// Array of generated rays
 	mutable Ray *rays = nullptr;
