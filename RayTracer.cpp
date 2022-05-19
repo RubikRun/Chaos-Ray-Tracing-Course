@@ -1,6 +1,7 @@
 #include "RayTracer.h"
 
 #include <fstream>
+#include <cmath>
 
 static const int maxColorComponent = 255;
 
@@ -25,45 +26,17 @@ bool RayTracer::renderImage(const char *filepath) const {
 	}
 
 	const int totalPixels = scene.imageResolution.x * scene.imageResolution.y;
-	rayResults = new RayResult[totalPixels];
+	pixels = new Color[totalPixels];
 	traceRays();
 
-	// Open stream to the output file
-	std::ofstream ppmFileStream(filepath, std::ios::out | std::ios::binary);
-	if (!ppmFileStream.is_open()) {
-		return false;
-	}
-	// Write PPM metadata about PPM version, image resolution and max color component
-    ppmFileStream << "P3\n";
-    ppmFileStream << scene.imageResolution.x << " " << scene.imageResolution.y << "\n";
-    ppmFileStream << maxColorComponent << "\n";
-
-    // Traverse pixels of the image
-    for (Vec2i pixel = { 0, 0 }; pixel.y < scene.imageResolution.y; pixel.y++) {
-		for (pixel.x = 0; pixel.x < scene.imageResolution.x; pixel.x++) {
-			// Index of the ray in the array that corresponds to this pixel
-			const int rayIdx = pixel.y * scene.imageResolution.x + pixel.x;
-			// Use the ray's color to color the pixel
-			const Color color = rayResults[rayIdx].color;
-			// Write the color to the output image file for the current pixel
-			ppmFileStream << int(color.r * maxColorComponent)
-				<< " " << int(color.g * maxColorComponent)
-				<< " " << int(color.b * maxColorComponent)
-				<< "\t";
-		}
-		ppmFileStream << "\n";
-	}
-
-    ppmFileStream.close();
-
-    return true;
+	return writePixelsToFile(filepath);
 }
 
 void RayTracer::generateRays() const {
 	// Traverse pixels of the image
 	for (Vec2i pixel = { 0, 0 }; pixel.y < scene.imageResolution.y; pixel.y++) {
 		for (pixel.x = 0; pixel.x < scene.imageResolution.x; pixel.x++) {
-			// Index of the ray in the array that corresponds to this pixel
+			// Index of the ray in the rays array - same as the pixel index
 			const int rayIdx = pixel.y * scene.imageResolution.x + pixel.x;
 			// Generate a ray for this pixel and save it in the rays array
 			rays[rayIdx] = generateRay(pixel);
@@ -100,9 +73,8 @@ Ray RayTracer::generateRay(const Vec2i &pixel) const {
 		-scene.camera.viewDepth
 	};
 
-	ray.orig = scene.camera.position;
-	ray.dir = scene.camera.rotation * cameraToPixel.getNormal();
-	ray.pixel = pixel;
+	ray.origin = scene.camera.position;
+	ray.direction = scene.camera.rotation * cameraToPixel.getNormal();
 
 	return ray;
 }
@@ -110,95 +82,145 @@ Ray RayTracer::generateRay(const Vec2i &pixel) const {
 void RayTracer::traceRays() const {
 	// Traverse rays
 	for (int rayIdx = 0; rayIdx < scene.imageResolution.x * scene.imageResolution.y; rayIdx++) {
-		// Trace each ray and save the result
-		rayResults[rayIdx] = traceRay(rays[rayIdx]);
+		// Trace each ray and save the calculated color to the corresponding pixel in the pixels array
+		pixels[rayIdx] = traceRay(rays[rayIdx]);
 	}
 }
 
-RayResult RayTracer::traceRay(const Ray &ray) const {
-	// This will be the closest ray result across all triangles
-	RayResult closestRayResult;
-	closestRayResult.tDist = -1.f;
+Color RayTracer::traceRay(const Ray &ray) const {
+	// Find the closest intersection of a triangle with the ray
+	TriangleIntersection closestIntersection;
+	float minDist = -1.f;
 	// Traverse all objects in the scene
 	for (int objIdx = 0; objIdx < scene.objectsCount; objIdx++) {
-		const Mesh &currObj = scene.objects[objIdx];
+		const Mesh &obj = scene.objects[objIdx];
 		// Traverse all triangles of the object
-		for (int trIdx = 0; trIdx < currObj.trianglesCount; trIdx++) {
-			// Trace the ray to the current triangle
-			const RayResult currRayResult = intersectTriangle(
-				currObj.vertices[currObj.triangles[trIdx].x],
-				currObj.vertices[currObj.triangles[trIdx].y],
-				currObj.vertices[currObj.triangles[trIdx].z],
-				ray
+		for (int trIdx = 0; trIdx < obj.trianglesCount; trIdx++) {
+			// Check for an intersection between the ray and the current triangle.
+			const RayTriangleIntersectionResult intersectionResult = rayTriangleIntersection(
+				ray,
+				obj.vertices[obj.triangles[trIdx].x],
+				obj.vertices[obj.triangles[trIdx].y],
+				obj.vertices[obj.triangles[trIdx].z]
 			);
-			if (currRayResult.tDist == -1.f) {
+			// Here we are considering only intersections through the front side of the triangle
+			if (!intersectionResult.doesIntersect || !intersectionResult.frontSide) {
 				continue;
 			}
-			// If the current ray intersection is closer than the closest intersection so far, use the current
-			if (currRayResult.tDist < closestRayResult.tDist || closestRayResult.tDist == -1.f) {
-				closestRayResult = currRayResult;
+			// If this is the first intersection found,
+			// or it is closer than the currently closest,
+			// than update the closest with the current one.
+			if (minDist == -1 || intersectionResult.distAlongRay < minDist) {
+				minDist = intersectionResult.distAlongRay;
+				closestIntersection.point = intersectionResult.point;
+				closestIntersection.mesh = &obj;
+				closestIntersection.triangle = &obj.triangles[trIdx];
 			}
 		}
 	}
-	
-	return closestRayResult;
+
+	if (minDist == -1.f) {
+		return scene.backgroundColor;
+	}
+
+	return shadeIntersection(closestIntersection);
 }
 
-RayResult RayTracer::intersectTriangle(const Vec3f &aVert, const Vec3f &bVert, const Vec3f &cVert,const Ray &ray) const {
-	// Normal of the triangle
-	const Vec3f trNorm = getTriangleNormal(
-		aVert,
-		bVert,
-		cVert
+Color RayTracer::shadeIntersection(const TriangleIntersection &intersection) const {
+	Color result = { 0.f, 0.f, 0.f };
+	// Calculate intersected triangle's normal
+	const Vec3f trNormal = getTriangleNormal(
+		intersection.mesh->vertices[intersection.triangle->x],
+		intersection.mesh->vertices[intersection.triangle->y],
+		intersection.mesh->vertices[intersection.triangle->z]
 	);
-	// Length of the ray projected on the triangle's normal.
-	// Taken with a minus so that it points towards the triangle
-	const float rayProj = -dotProduct(ray.dir, trNorm);
-	// Distance from the camera to the triangle's plane
-	const float distToTrPlane = -dotProduct(aVert - scene.camera.position, trNorm);
-
-	// If the ray projection on the triangle's normal is approximately zero,
-	// than the ray is almost perpendicular to the triangle's plane,
-	// so we don't bother to intersect it with the triangle
-	if (isApproxZero(rayProj)) {
-		return RayResult();
-	}
-	// If this distance from the camera to the triangle's plane is negative,
-	// this means that the ray is looking at the back side of the triangle,
-	// so we ignore it
-	if (distToTrPlane < 0.f) {
-		return RayResult();
-	}
-
-	// Distance/time along the ray from the ray origin to the point of intersection
-	const float tDist = distToTrPlane / rayProj;
-	// Point of intersection between the ray and the triangle's plane
-	const Vec3f interPoint = ray.orig + ray.dir * tDist;
-
-	// Check if the point of intersection is inside the triangle
-	const bool insideTriangle = (
-		dotProduct(
-			trNorm,
-			crossProduct(bVert - aVert, interPoint - aVert)
-		) > 0.f
-		&&
-		dotProduct(
-			trNorm,
-			crossProduct(cVert - bVert, interPoint - bVert)
-		) > 0.f
-		&&
-		dotProduct(
-			trNorm,
-			crossProduct(aVert - cVert, interPoint - cVert)
-		) > 0.f
-	);
-
-	if (!insideTriangle) {
-		return RayResult();
+	// Traverse lights in the scene
+	for (int lIdx = 0; lIdx < scene.lightsCount; lIdx++) {
+		const Light &light = scene.lights[lIdx];
+		// Calculate vector from the intersection point to the light
+		const Vec3f lightVec = light.position - intersection.point;
+		// Calculate light unit direction
+		const Vec3f lightDir = lightVec.getNormal();
+		// Create a shadow ray in the light direction
+		const Ray shadowRay = {
+			// with its origin at the intersection point,
+			// but offset with some tiny amount (shadow bias) along the triangle's normal
+			intersection.point + trNormal * scene.shadowBias,
+			lightDir
+		};
+		// Check if the intersection point is in shadow.
+		// It's in shadow if the shadow ray intersects any triangles in the scene.
+		bool inShadow = false;
+		// Traverse all objects in the scene
+		for (int objIdx = 0; objIdx < scene.objectsCount; objIdx++) {
+			const Mesh &obj = scene.objects[objIdx];
+			// Traverse all triangles of the object
+			for (int trIdx = 0; trIdx < obj.trianglesCount; trIdx++) {
+				// Check for intersection between the shadow ray and the current triangle.
+				const RayTriangleIntersectionResult intersectionResult = rayTriangleIntersection(
+					shadowRay,
+					obj.vertices[obj.triangles[trIdx].x],
+					obj.vertices[obj.triangles[trIdx].y],
+					obj.vertices[obj.triangles[trIdx].z]
+				);
+				// If there is an intersection,
+				// then the point is in shadow and we can stop looking for other intersections.
+				// Here we are considering both intersections from the front and from the back side of the triangle.
+				if (intersectionResult.doesIntersect) {
+					inShadow = true;
+					break;
+				}
+			}
+			if (inShadow) {
+				break;
+			}
+		}
+		// If the point is not in shadow, then the current light contributes to the final result
+		if (!inShadow) {
+			// Calculate the radius and area of the sphere centered at the light and passing through the intersection point
+			const float sphRadius = lightVec.getLength();
+			const float sphArea = 4 * M_PI * sphRadius * sphRadius;
+			// Calculate the cosine law for the light direction and triangle's normal
+			const float cosLaw = getMax(0.f, dotProduct(lightDir, trNormal));
+			result += light.albedo * ((light.intensity / sphArea) * cosLaw);
+		}
 	}
 	
-	return RayResult(
-		{ maxColorComponent, maxColorComponent, maxColorComponent },
-		tDist
-	);
+	return result;
+}
+
+bool RayTracer::writePixelsToFile(const char *filepath) const {
+	if (!pixels) {
+		return false;
+	}
+
+	// Open stream to the output file
+	std::ofstream ppmFileStream(filepath, std::ios::out | std::ios::binary);
+	if (!ppmFileStream.is_open()) {
+		return false;
+	}
+	// Write PPM metadata about PPM version, image resolution and max color component
+    ppmFileStream << "P3\n";
+    ppmFileStream << scene.imageResolution.x << " " << scene.imageResolution.y << "\n";
+    ppmFileStream << maxColorComponent << "\n";
+
+    // Traverse pixels of the image
+    for (Vec2i pixel = { 0, 0 }; pixel.y < scene.imageResolution.y; pixel.y++) {
+		for (pixel.x = 0; pixel.x < scene.imageResolution.x; pixel.x++) {
+			// Index of the pixel in the pixels array
+			const int pixIdx = pixel.y * scene.imageResolution.x + pixel.x;
+			// Use the pixel's color from the pixels array
+			const Color color = pixels[pixIdx];
+			// Write the color to the output image file for the current pixel
+			ppmFileStream << int(color.x * maxColorComponent)
+				<< " " << int(color.y * maxColorComponent)
+				<< " " << int(color.z * maxColorComponent)
+				<< "\t";
+		}
+		ppmFileStream << "\n";
+	}
+
+    ppmFileStream.close();
+
+	return true;
 }

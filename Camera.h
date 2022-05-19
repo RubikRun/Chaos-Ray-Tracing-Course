@@ -1,6 +1,9 @@
 #pragma once
 
-#include "utils.hpp"
+#include "utils/MathUtils.h"
+#include "rapidjson/document.h"
+
+using namespace MathUtils;
 
 /// Class holding data about the camera
 struct Camera {
@@ -8,29 +11,28 @@ struct Camera {
 	Camera(){}
 
 	/// Creates a camera with given view parameters
-	/// @param[in] viewSize Size of the image in world space
-	/// @param[in] viewDepth Distance between camera and image plane 
-	Camera(const Vec2f &viewSize, float viewDepth)
-		: viewSize(viewSize)
-		, viewDepth(viewDepth)
-	{}
-
-	/// Creates a camera with given view parameters, position and rotation
-	/// @param[in] viewSize Size of the image in world space
-	/// @param[in] viewDepth Distance between camera and image plane
 	/// @param[in] position Position of the camera in world space
-	/// @param[in] rotation Rotation matrix by which the camera will be rotated
-	Camera(const Vec2f &viewSize, float viewDepth, const Vec3f &position, const Matrix3f &rotation)
-		: viewSize(viewSize)
-		, viewDepth(viewDepth)
-		, position(position)
+	/// @param[in] rotation Rotation matrix by which the camera will be rotated 
+	Camera(const Vec3f &position, const Matrix3f &rotation)
+		: position(position)
 		, rotation(rotation)
 	{}
 
-	/// Size of the image in world space
-	Vec2f viewSize = { 2.f, 2.f };
-	/// Distance between camera and image plane
-	float viewDepth = 1.f;
+	/// Creates a camera with given view parameters, position and rotation
+	/// @param[in] position Position of the camera in world space
+	/// @param[in] rotation Rotation matrix by which the camera will be rotated
+	/// @param[in] viewSize Size of the image in world space
+	/// @param[in] viewDepth Distance between camera and image plane
+	Camera(const Vec3f &position, const Matrix3f &rotation, const Vec2f &viewSize, float viewDepth)
+		: position(position)
+		, rotation(rotation)
+		, viewSize(viewSize)
+		, viewDepth(viewDepth)
+	{}
+
+	/// Reads the camera from a JSON value
+	void readFromJson(const rapidjson::Value &json);
+
 	/// Position of the camera in world space
 	Vec3f position = { 0.f, 0.f, 0.f };
 	/// Rotation matrix by which the camera will be rotated
@@ -39,6 +41,10 @@ struct Camera {
 		{ 0.f, 1.f, 0.f },
 		{ 0.f, 0.f, 1.f }
 	};
+	/// Size of the image in world space
+	Vec2f viewSize = { 2.f, 2.f * (1080.f / 1920.f) };
+	/// Distance between camera and image plane
+	float viewDepth = 0.8f;
 
 	/// Moves the camera forward/backwards by some amount according to its rotation
 	void dolly(float amount);

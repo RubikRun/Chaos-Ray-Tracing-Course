@@ -1,5 +1,26 @@
 #include "Camera.h"
 
+#include <cmath>
+#include "utils/JsonUtils.h"
+
+void Camera::readFromJson(const rapidjson::Value &json) {
+	if (!json.IsNull()) {
+		assert(json.IsObject());
+
+		const rapidjson::Value &matrixVal = json.FindMember("matrix")->value;
+		if (!matrixVal.IsNull()) {
+			assert(matrixVal.IsArray());
+			rotation = JsonUtils::getMatrix3fFromJsonArr(matrixVal.GetArray());
+		}
+
+		const rapidjson::Value &positionVal = json.FindMember("position")->value;
+		if (!positionVal.IsNull()) {
+			assert(positionVal.IsArray());
+			position = JsonUtils::getVec3fFromJsonArr(positionVal.GetArray());
+		}
+	}
+}
+
 void Camera::dolly(float amount) {
 	position += rotation * Vec3f(0.f, 0.f, -amount);
 }
